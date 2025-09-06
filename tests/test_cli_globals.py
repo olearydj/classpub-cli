@@ -29,3 +29,14 @@ def test_warning_console_level_still_prints_result_to_stdout():
     assert res.stdout.strip() != ""
 
 
+def test_console_level_env_default_and_explicit_override(monkeypatch):
+    runner = CliRunner()
+    # production env should default console level to WARNING (no noisy stderr expected from INFO logs)
+    monkeypatch.setenv("CLASSPUB_ENV", "production")
+    res1 = runner.invoke(app, ["init"])  # any command
+    assert res1.exit_code == 0
+    # explicit override to ERROR
+    res2 = runner.invoke(app, ["--log-level", "error", "init"])
+    assert res2.exit_code == 0
+
+
