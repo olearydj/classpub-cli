@@ -1,0 +1,3 @@
+# Released Files (manifest)
+# Add files (e.g., notebooks/01.ipynb) or folders with trailing / (e.g., data/)
+# Lines starting with # are comments. Empty lines are ignored.
