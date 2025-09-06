@@ -1,13 +1,6 @@
-__pycache__/
-.pytest_cache/
-.venv/
-.env
-.coverage
-coverage.xml
-*.log
-
 # Python-generated files
 __pycache__/
+.pytest_cache/
 *.py[oc]
 build/
 dist/
@@ -17,5 +10,14 @@ wheels/
 # Virtual environments
 .venv
 
-# initial implementation for design and reference
+# other
+.env
+.coverage
+coverage.xml
+*.log
+
+# folders
 just-reference/
+sandbox-e2e/
+pending/
+preview/
