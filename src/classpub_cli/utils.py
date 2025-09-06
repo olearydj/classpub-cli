@@ -11,6 +11,8 @@ import unicodedata
 from pathlib import Path
 import hashlib
 from typing import Iterable, Optional, Tuple, List, Sequence
+import nbformat
+import json
 
 from .paths import PENDING, MANIFEST
 
@@ -164,6 +166,67 @@ def files_equal(a: Path, b: Path, chunk_size: int = 8192) -> bool:
     if sa.st_size != sb.st_size:
         return False
     return sha256_file(a, chunk_size=chunk_size) == sha256_file(b, chunk_size=chunk_size)
+
+
+# --------------------------
+# Notebook-aware comparison
+# --------------------------
+
+
+def _is_notebook(path: Path) -> bool:
+    try:
+        return path.suffix.lower() == ".ipynb"
+    except Exception:
+        return False
+
+
+def _normalized_notebook_text(path: Path) -> str:
+    """Return a canonical JSON string of a notebook with outputs/exec-count removed and cell ids dropped.
+
+    Implementation notes:
+    - Parse with nbformat, then convert to a plain dict via nbformat.writes()+json.loads
+      to avoid re-insertion of ids during serialization.
+    - Strip per-cell: outputs=[], execution_count=None, metadata.execution removed, id removed.
+    - Return json dumps with sorted keys and compact separators for stable comparison.
+    """
+    nb = nbformat.read(str(path), as_version=4)
+    as_dict = json.loads(nbformat.writes(nb))
+    cells = as_dict.get("cells", [])
+    for cell in cells:
+        try:
+            if cell.get("cell_type") == "code":
+                cell["outputs"] = []
+                cell["execution_count"] = None
+                md = cell.get("metadata")
+                if isinstance(md, dict):
+                    md.pop("execution", None)
+            # Remove cell id entirely to avoid spurious diffs
+            cell.pop("id", None)
+        except Exception:
+            continue
+    as_dict["cells"] = cells
+    return json.dumps(as_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def notebook_files_equal(a: Path, b: Path) -> bool:
+    """Return True if two notebooks are equal under output/exec-count normalization."""
+    try:
+        ta = _normalized_notebook_text(a)
+        tb = _normalized_notebook_text(b)
+        return ta == tb
+    except Exception:
+        # Fall back to raw file equality on error
+        try:
+            return files_equal(a, b)
+        except Exception:
+            return False
+
+
+def content_equal(a: Path, b: Path) -> bool:
+    """Notebook-aware file equality: normalizes .ipynb, byte-compare otherwise."""
+    if _is_notebook(a) and _is_notebook(b):
+        return notebook_files_equal(a, b)
+    return files_equal(a, b)
 
 
 def _list_rel_files(root: Path) -> list[Path]:

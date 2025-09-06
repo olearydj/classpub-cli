@@ -9,9 +9,10 @@ import socket
 import time
 from pathlib import Path
 from typing import Callable, Iterable, List, Tuple
+import nbformat
 
 from .paths import PENDING, PREVIEW
-from .utils import Entry, read_manifest, files_equal, IGNORED_DIRS, IGNORED_FILES
+from .utils import Entry, read_manifest, files_equal, IGNORED_DIRS, IGNORED_FILES, _atomic_write, content_equal
 
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ def build_sync_plan(entries: list[Entry], *, force_full_resync: bool = False) ->
                     per_entry_updated[e.raw] = True
                 else:
                     try:
-                        if force_full_resync or (not files_equal(src, dst)):
+                        if force_full_resync or (not content_equal(src, dst)):
                             ops.append(FileOp(src=src, dst=dst, kind="update"))
                             per_entry_updated[e.raw] = True
                     except OSError:
@@ -119,7 +120,7 @@ def build_sync_plan(entries: list[Entry], *, force_full_resync: bool = False) ->
                 per_entry_updated[e.raw] = True
             else:
                 try:
-                    if force_full_resync or (not files_equal(src, dst)):
+                    if force_full_resync or (not content_equal(src, dst)):
                         ops.append(FileOp(src=src, dst=dst, kind="update"))
                         per_entry_updated[e.raw] = True
                 except OSError:
@@ -224,6 +225,108 @@ def _prune_empty_dirs(root: Path) -> int:
         except Exception:
             continue
     return removed
+
+
+def _is_ipynb(path: Path) -> bool:
+    try:
+        return path.suffix.lower() == ".ipynb"
+    except Exception:
+        return False
+
+
+def _iter_preview_notebooks_for_strip(
+    file_ops: list[FileOp], entries: list[Entry], existed_before: dict[str, bool]
+) -> list[Path]:
+    """Return absolute Paths of preview notebooks to be stripped.
+
+    - Always includes any .ipynb files that were copied/updated in this run.
+    - For folder entries being copied the first time (preview folder did not exist
+      before this run), include all .ipynb files under that preview folder to
+      ensure they are normalized.
+    """
+    targets: set[Path] = set()
+
+    # Notebooks touched this run
+    for op in file_ops:
+        if _is_ipynb(op.dst):
+            targets.add(op.dst)
+
+    # First-time folder copies: include all notebooks in the new preview folder
+    for e in entries:
+        if not e.is_dir:
+            continue
+        # If the folder did not exist before, include all .ipynb under it
+        if not existed_before.get(e.raw, False):
+            src_dir = PREVIEW / e.rel
+            for rel in _iter_rel_files(src_dir):
+                abs_p = src_dir / rel
+                if _is_ipynb(abs_p):
+                    targets.add(abs_p)
+
+    return sorted(targets, key=lambda p: p.as_posix())
+
+
+def _strip_notebook_outputs_in_place(path: Path) -> bool:
+    """Strip outputs and execution counts from a notebook file.
+
+    Returns True if write succeeded, False otherwise.
+    """
+    try:
+        if _is_symlink(path) or (not path.exists()):
+            return False
+        nb = nbformat.read(str(path), as_version=4)
+        changed = False
+        for cell in getattr(nb, "cells", []):
+            try:
+                if getattr(cell, "cell_type", None) == "code":
+                    # Normalize outputs and execution count
+                    if getattr(cell, "outputs", None):
+                        cell.outputs = []  # type: ignore[attr-defined]
+                        changed = True
+                    if getattr(cell, "execution_count", None) is not None:
+                        cell.execution_count = None  # type: ignore[attr-defined]
+                        changed = True
+                    # Best-effort metadata cleanup; keep conservative to avoid data loss
+                    md = getattr(cell, "metadata", None)
+                    if isinstance(md, dict):
+                        if "execution" in md:
+                            md.pop("execution", None)
+                            changed = True
+            except Exception:
+                # Continue stripping other cells
+                continue
+
+        if not changed:
+            return True
+
+        text = nbformat.writes(nb)
+        _atomic_write(path, text)
+        return True
+    except Exception as e:
+        logger.warning("Failed to strip outputs for %s: %s", path.as_posix(), e)
+        return False
+
+
+def strip_notebook_outputs_in_preview(
+    file_ops: list[FileOp], entries: list[Entry], existed_before: dict[str, bool], dry_run: bool
+) -> None:
+    """Strip outputs in preview notebooks after copy/update.
+
+    No-op on dry_run. Logs warnings on failures and continues.
+    """
+    if dry_run:
+        return
+    try:
+        targets = _iter_preview_notebooks_for_strip(file_ops, entries, existed_before)
+        for p in targets:
+            ok = _strip_notebook_outputs_in_place(p)
+            if ok:
+                logger.debug("Stripped notebook outputs: %s", p.as_posix())
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        logger.warning("Notebook strip encountered an issue: %s", e)
+        # continue; stripping is best-effort
 
 
 LOCK_PATH = Path(".classpub.lock")
@@ -410,6 +513,14 @@ def run_sync(assume_yes: bool, dry_run: bool, console_print: Callable[[str], Non
 
     # Apply copies/updates
     _apply_file_ops(file_ops, dry_run=dry_run)
+
+    # Strip notebook outputs in preview after applying file ops
+    try:
+        strip_notebook_outputs_in_preview(file_ops, entries, existed_before, dry_run)
+    except KeyboardInterrupt:
+        _remove_marker()
+        _release_single_writer_lock()
+        return 130
 
     # Per-entry counts (updated/unchanged)
     updated_entries = sum(1 for raw, u in per_entry_updated.items() if u)

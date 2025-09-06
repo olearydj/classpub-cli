@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .paths import PENDING, PREVIEW
-from .utils import Entry, IGNORED_DIRS, IGNORED_FILES, read_manifest, ensure_repo_root_present, files_equal
+from .utils import Entry, IGNORED_DIRS, IGNORED_FILES, read_manifest, ensure_repo_root_present, files_equal, content_equal
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def _classify_folder(pending_dir: Path, preview_dir: Path) -> ItemStatus:
         src = pending_dir / rel_str
         dst = preview_dir / rel_str
         try:
-            if not files_equal(src, dst):
+            if not content_equal(src, dst):
                 return ItemStatus.MODIFIED
         except OSError:
             logger.warning("Content compare failed for %s", rel_str)
@@ -148,7 +148,7 @@ def compute_status() -> StatusReport:
                 counters = dataclass_replace(counters, staged=counters.staged + 1)
             else:
                 try:
-                    if files_equal(src, dst):
+                    if content_equal(src, dst):
                         # touched if newer mtime on src
                         try:
                             if src.stat().st_mtime_ns > dst.stat().st_mtime_ns:

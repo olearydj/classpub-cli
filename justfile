@@ -45,6 +45,7 @@ remove item:
 check:
     uv run classpub check
 
+# Synchronize files to preview folder
 sync args="":
     uv run classpub sync {{args}}
 # diff item="":
@@ -60,6 +61,7 @@ run *args:
 
 # --- Testing ---
 
+# Run all tests in quiet mode
 test:
     uv run pytest -q
 
@@ -74,27 +76,12 @@ cov:
 
 # --- End-to-End Demo ---
 
+# Remove the sandbox folders
 e2e-clean:
     rm -rf sandbox-e2e
 
+# Run an end-to-end test of classpub
 e2e-demo:
-    # clean sandbox
-    rm -rf sandbox-e2e
-    mkdir -p sandbox-e2e/pending/notebooks
-    # initialize manifest
-    cd sandbox-e2e && uv run classpub init
-    # create sample file
-    echo 'print("Hello World")' > sandbox-e2e/pending/notebooks/hello.py
-    # release and check
-    cd sandbox-e2e && uv run classpub release notebooks/hello.py
-    cd sandbox-e2e && uv run classpub check
-    # sync and check
-    cd sandbox-e2e && uv run classpub sync --yes
-    cd sandbox-e2e && uv run classpub check
-    # modify then sync again
-    echo 'print("Modified")' > sandbox-e2e/pending/notebooks/hello.py
-    cd sandbox-e2e && uv run classpub check
-    cd sandbox-e2e && uv run classpub sync --yes
-    cd sandbox-e2e && uv run classpub check
+    bash scripts/e2e-demo.sh
 
 

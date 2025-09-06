@@ -6,6 +6,8 @@ from datetime import datetime, timezone, timedelta
 from typer.testing import CliRunner
 
 from classpub_cli.cli import app
+import json
+import nbformat
 
 
 def _summary(stdout: str) -> str:
@@ -248,6 +250,146 @@ def test_sync_symlink_handling(cli_runner: CliRunner, tmp_repo, write_manifest):
     assert (Path("preview") / "folder" / "real.txt").exists()
     # Ensure symlink not present (or ignored)
     assert (Path("preview") / "folder" / "link.lnk").exists() is False
+
+
+def _write_notebook_with_output(path: Path) -> None:
+    nb = nbformat.v4.new_notebook()
+    code = "print('hello')\n"
+    cell = nbformat.v4.new_code_cell(source=code)
+    cell.execution_count = 3
+    cell.outputs = [
+        nbformat.v4.new_output(output_type="stream", name="stdout", text="hello\n"),
+    ]
+    nb.cells.append(cell)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    nbformat.write(nb, str(path))
+
+
+def test_notebook_outputs_stripped(cli_runner: CliRunner, tmp_repo, write_manifest):
+    # Arrange a notebook with execution count and outputs
+    nb_src = Path("pending") / "notebooks" / "demo.ipynb"
+    _write_notebook_with_output(nb_src)
+    write_manifest(["notebooks/demo.ipynb"])  # track file directly
+
+    # Act
+    res = cli_runner.invoke(app, ["sync", "--yes"])  # apply strip after copy
+    assert res.exit_code == 0
+
+    # Assert preview notebook exists and is stripped
+    nb_dst = Path("preview") / "notebooks" / "demo.ipynb"
+    assert nb_dst.exists()
+    nb = nbformat.read(str(nb_dst), as_version=4)
+    code_cells = [c for c in nb.cells if getattr(c, "cell_type", None) == "code"]
+    assert code_cells, "expected at least one code cell"
+    for c in code_cells:
+        assert getattr(c, "outputs", []) == []
+        assert getattr(c, "execution_count", None) is None
+
+
+def test_notebook_strip_skipped_in_dry_run(cli_runner: CliRunner, tmp_repo, write_manifest):
+    nb_src = Path("pending") / "notebooks" / "dry.ipynb"
+    _write_notebook_with_output(nb_src)
+    write_manifest(["notebooks/dry.ipynb"])  # track file directly
+
+    # Dry run should not create or modify preview files
+    res = cli_runner.invoke(app, ["sync", "--dry-run"])  # no writes
+    assert res.exit_code == 0
+    nb_dst = Path("preview") / "notebooks" / "dry.ipynb"
+    assert nb_dst.exists() is False
+
+
+def test_notebook_normalized_equality_prevents_reupdate(cli_runner: CliRunner, tmp_repo, write_manifest):
+    # First run: create preview stripped from pending with outputs
+    nb_src = Path("pending") / "notebooks" / "norm.ipynb"
+    _write_notebook_with_output(nb_src)
+    write_manifest(["notebooks/norm.ipynb"])  # tracked file
+    r1 = cli_runner.invoke(app, ["sync", "--yes"])  # copies and strips
+    assert r1.exit_code == 0
+
+    # Second run: without changing pending, normalized compare should consider equal
+    r2 = cli_runner.invoke(app, ["sync", "--yes"])  # should be unchanged
+    assert r2.exit_code == 0
+    # Summary should show 0 updated, 0 removed, 1 unchanged (one manifest entry)
+    lines = [ln for ln in r2.stdout.splitlines() if ln.strip()]
+    assert lines and lines[-1].endswith("0 updated, 0 removed, 1 unchanged")
+
+
+def test_sync_folder_notebooks_stripped_and_idempotent(cli_runner: CliRunner, tmp_repo, write_manifest):
+    # Arrange: tracked folder with a notebook that has outputs
+    nb_src = Path("pending") / "notebooks" / "f1.ipynb"
+    _write_notebook_with_output(nb_src)
+    write_manifest(["notebooks/"])
+
+    # First sync: copy and strip
+    r1 = cli_runner.invoke(app, ["sync", "--yes"])
+    assert r1.exit_code == 0
+    nb_dst = Path("preview") / "notebooks" / "f1.ipynb"
+    assert nb_dst.exists()
+    nb = nbformat.read(str(nb_dst), as_version=4)
+    for c in nb.cells:
+        if getattr(c, "cell_type", None) == "code":
+            assert getattr(c, "outputs", []) == []
+            assert getattr(c, "execution_count", None) is None
+    # Per-entry counts: updated once
+    assert any("✓ Sync complete: 1 updated, 0 removed, 0 unchanged" in ln for ln in r1.stdout.splitlines())
+
+    # Second sync: unchanged per-entry
+    r2 = cli_runner.invoke(app, ["sync", "--yes"])
+    assert r2.exit_code == 0
+    assert any("✓ Sync complete: 0 updated, 0 removed, 1 unchanged" in ln for ln in r2.stdout.splitlines())
+
+
+def test_sync_no_strip_stdout_noise(cli_runner: CliRunner, tmp_repo, write_manifest):
+    nb_src = Path("pending") / "notebooks" / "quiet.ipynb"
+    _write_notebook_with_output(nb_src)
+    write_manifest(["notebooks/quiet.ipynb"])  # track file directly
+
+    r = cli_runner.invoke(app, ["sync", "--yes"])
+    assert r.exit_code == 0
+    out_lower = r.stdout.lower()
+    # Ensure no explicit stripping messages
+    assert "strip" not in out_lower
+    assert "outputs" not in out_lower
+
+
+def test_sync_dry_run_folder_notebooks_no_write(cli_runner: CliRunner, tmp_repo, write_manifest):
+    nb_src = Path("pending") / "nbs" / "d1.ipynb"
+    _write_notebook_with_output(nb_src)
+    write_manifest(["nbs/"])
+
+    r = cli_runner.invoke(app, ["sync", "--dry-run"])  # plan only
+    assert r.exit_code == 0
+    assert (Path("preview") / "nbs" / "d1.ipynb").exists() is False
+
+
+def test_symlink_notebook_skipped(cli_runner: CliRunner, tmp_repo, write_manifest):
+    base = Path("pending") / "nbdir"
+    base.mkdir(parents=True, exist_ok=True)
+    real = base / "real.ipynb"
+    _write_notebook_with_output(real)
+    # Create a symlink to the notebook if possible
+    link = base / "link.ipynb"
+    try:
+        link.symlink_to("real.ipynb")
+    except Exception:
+        # If symlink creation fails on platform, skip the symlink part
+        pass
+    write_manifest(["nbdir/"])
+
+    r = cli_runner.invoke(app, ["sync", "--yes"])
+    assert r.exit_code == 0
+    assert (Path("preview") / "nbdir" / "real.ipynb").exists()
+    # Symlink should not be present/copied
+    assert (Path("preview") / "nbdir" / "link.ipynb").exists() is False
+
+
+def test_orphan_ipynb_listed_in_prompt(cli_runner: CliRunner, tmp_repo):
+    Path("preview").mkdir(exist_ok=True)
+    (Path("preview") / "orphan.ipynb").write_text("{}\n", encoding="utf-8")
+    r = cli_runner.invoke(app, ["sync"], input="n\n")
+    assert r.exit_code == 0
+    assert "⚠️  These files will be REMOVED from preview (not in manifest):" in r.stdout
+    assert "     - orphan.ipynb" in r.stdout
 
 
 def test_sync_prompt_variants(cli_runner: CliRunner, tmp_repo):
