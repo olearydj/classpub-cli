@@ -1,0 +1,17 @@
+[project]
+name = "classpub-cli"
+version = "0.1.0"
+description = "Course content management and publishing CLI"
+readme = "README.md"
+authors = [
+    { name = "Dan O'Leary", email = "oleary.dj@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+classpub = "classpub_cli.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.13,<0.9.0"]
+build-backend = "uv_build"
