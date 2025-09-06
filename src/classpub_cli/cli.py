@@ -25,6 +25,7 @@ from .utils import (
 from .paths import PREVIEW
 from .status import compute_status, ItemStatus
 from .sync import run_sync
+from .diff import run_diff_all, run_diff_item
 
 
 app = typer.Typer(add_completion=False, help="Classpub CLI")
@@ -260,6 +261,26 @@ def remove_cmd(ctx: typer.Context, item: str = typer.Argument(..., help="File or
         for e in entries:
             console.print(f"  {e.raw}", highlight=False)
         raise typer.Exit(code=0)
+
+
+@app.command()
+def diff(ctx: typer.Context, item: Optional[str] = typer.Argument(None)) -> typer.Exit:
+    """Show diffs between preview/ and pending/ for tracked files and folders.
+
+    Without arguments, iterates manifest entries; with ITEM, resolves like release/remove and diffs that item.
+    """
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+
+    def _print(line: str) -> None:
+        console.print(line, highlight=False)
+
+    if item is None:
+        code = run_diff_all(_print)
+        raise typer.Exit(code=code)
+    else:
+        code = run_diff_item(item, _print)
+        raise typer.Exit(code=code)
 
 
 def main() -> None:

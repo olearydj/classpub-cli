@@ -62,7 +62,7 @@ This complexity has become brittle and hard to test in Bash. A Python CLI can pr
 - Manifest manager for reading/writing `pending/RELEASES.txt`.
 - Status engine computes per-item and folder states.
 - Sync engine handles copy/update and optional removal.
-- Diff engine uses Git CLI (`git diff --no-index`) for text files and `nbdime` (Python API) for notebooks.
+- Diff engine uses Git CLI (`git diff --no-index`) for all files; notebooks rely on Git’s configured `nbdime` driver (no direct Python API calls).
 - Conversion engine for `to-md` via `nbconvert` (Python API; required dependency).
 - Validation and cleanup utilities.
  
@@ -83,7 +83,7 @@ Template adoption: Logging and Typer scaffolding are adopted verbatim from `cli-
 - Logging: Python stdlib `logging` with `RichHandler` for human mode and a JSON formatter for CI/machine mode (stderr only); no heavy logging deps required.
 - Paths: `pathlib`
 - Hashing: `hashlib` (sha256). For equality, always hash when sizes are equal; do not rely on mtime; stream in chunks.
-- Required libraries: `nbformat`, `nbdime`, `nbconvert`, `nbstripout` (Python APIs; no shelling out for these).
+- Required libraries: `nbformat`, `nbdime`, `nbconvert`, `nbstripout` (`nbformat`, `nbconvert`, and `nbstripout` via Python APIs; `nbdime` is used by Git’s diff driver; no direct Python API calls).
 - Git CLI is required for text diffs; no dependency on `rsync`.
  
 Template adoption: We do not restate cli-template logging/Typer internals here; we adopt them as-is and document only deltas (see §12.5 and §21 Phase 0).
@@ -231,13 +231,13 @@ Rationale:
 - Exit codes: 0 on success; 1 on permission/IO errors; 130+ on prompt abort.
 
 ### 7.6 `diff [item]`
-- For non-notebook files, require Git CLI and use `git diff --no-index` to produce diffs.
-- For notebooks, use `nbdime` Python API to produce notebook-aware diffs.
+- For all files, require Git CLI and use `git diff --no-index`.
+- For notebooks, rely on Git’s configured `nbdime` driver (no direct Python API).
 - No argument:
   - Header (stdout): `📊 Diff: preview vs pending (tracked files only)`
   - Iterate manifest entries:
     - Text files present in both → `git diff --no-index preview/file pending/file` output.
-    - Notebooks present in both → `nbdime` output (not massaged; tests should not assert exact body formatting).
+    - Notebooks present in both → `git diff --no-index` output via Git’s `nbdime` driver (not massaged; tests should not assert exact body formatting).
     - Folders present in both → folder change summary with this schema:
       - Heading: `📁 <entry>/ (folder has changes)`
       - Sections (only those non-empty): `Added:`, `Removed:`, `Changed:`
@@ -247,7 +247,7 @@ Rationale:
   - Resolve like `release`.
   - If file:
     - If only in `pending/` → info message (“exists in pending but not in preview”).
-    - Else produce git or notebook diff as above.
+    - Else produce git diff as above.
   - If folder:
     - If both exist → same folder change summary schema as above.
     - Else → info message.

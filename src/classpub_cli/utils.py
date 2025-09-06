@@ -444,6 +444,21 @@ def resolve_item(token: str) -> Resolved:
     # Exact relative path
     exact = (PENDING / tok_no_slash)
     if exact.exists():
+        # Even if an exact path exists, perform basename disambiguation: if multiple
+        # items share this basename across files/folders, treat as ambiguous unless
+        # the user explicitly disambiguates via trailing slash or full path.
+        files0, dirs0 = scan_pending_tree()
+        base0 = _normalize_nfc(Path(tok_no_slash).name)
+        cand0: list[tuple[Path, str]] = []
+        for f in files0:
+            if _normalize_nfc(f.name) == base0:
+                cand0.append((f, "file"))
+        for d in dirs0:
+            if _normalize_nfc(d.name) == base0:
+                cand0.append((d, "folder"))
+        if len(cand0) > 1:
+            return Resolved(status=Resolution.AMBIGUOUS, candidates=sorted(cand0, key=lambda t: t[0].as_posix()))
+
         if exact.is_dir():
             return Resolved(status=Resolution.DIR, rel=Path(tok_no_slash), is_dir=True)
         if prefer_dir and exact.is_file():

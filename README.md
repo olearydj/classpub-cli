@@ -29,6 +29,27 @@ Course publishing CLI for managing a three-stage content workflow: develop in `p
 Python libraries (installed with the package):
 - Typer, Rich, nbformat, nbdime (Python API), nbconvert, nbstripout
 
+## Required: nbdime Git integration for notebook diffs
+
+`classpub diff` uses `git diff --no-index` for all files. For notebooks, Git must be configured to use `nbdime` as the diff driver. Configure it once globally or add a repo‑local `.gitattributes`.
+
+```bash
+# Enable nbdime globally for notebook diffs
+nbdime config-git --enable --global
+
+# Ensure nbdime is the default notebook diff tool
+git config --global diff.jupyternotebook.tool nbdime
+
+# Verify configuration
+git config --global --list | grep nbdime
+```
+
+Repo‑local alternative (committable): add `.gitattributes` with:
+
+```
+*.ipynb diff=jupyternotebook
+```
+
 ## Installation
 
 From source (editable install):
@@ -74,7 +95,7 @@ classpub clean
 - `check` – Show status for tracked items and orphans in preview
 - `sync` – Copy/update released items to preview; prompt to remove orphans; strip notebook outputs
   - Options: `--yes/-y` (auto-approve removals), `--dry-run`
-- `diff [item]` – Show diffs for files and folder summaries; notebooks via `nbdime` API
+- `diff [item]` – Show diffs for files and folder summaries; notebooks via Git’s `nbdime` driver
 - `to-md` – Convert synchronized notebooks to Markdown under `pending/md/...`
 - `validate` – Verify structure and common pitfalls
 - `clean` – Remove `.DS_Store` files and `.ipynb_checkpoints` directories
