@@ -23,6 +23,7 @@ from .utils import (
     remove_entry_by_raw,
 )
 from .paths import PREVIEW
+from .status import compute_status, ItemStatus
 
 
 app = typer.Typer(add_completion=False, help="Classpub CLI")
@@ -97,6 +98,54 @@ def validate(ctx: typer.Context) -> typer.Exit:
 
     console.print("✅ Dependencies OK", highlight=False)
     console.print(f"✅ Git OK", highlight=False)
+    raise typer.Exit(code=0)
+
+
+@app.command()
+def check(ctx: typer.Context) -> typer.Exit:
+    """Show repository status for tracked and untracked items."""
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+    if not utils.ensure_repo_root_present():
+        console.print("❌ This command must be run from the repository root (missing 'pending/').", highlight=False)
+        raise typer.Exit(code=1)
+
+    report = compute_status()
+
+    icon = {
+        ItemStatus.SYNCED: "✅",
+        ItemStatus.MODIFIED: "🔄",
+        ItemStatus.TOUCHED: "👆",
+        ItemStatus.STAGED: "📋",
+        ItemStatus.UNTRACKED: "📄",
+        ItemStatus.REMOVED: "⚠️",
+    }
+
+    for line in report.lines:
+        prefix = icon[line.status]
+        path_display = line.rel_path if not line.is_folder else (line.rel_path if line.rel_path.endswith("/") else line.rel_path + "/")
+        if line.note == "missing_from_pending":
+            console.print(f"⚠️  {path_display} (missing from pending)", highlight=False)
+        elif line.status is ItemStatus.MODIFIED:
+            console.print(f"{prefix} {path_display} (modified)", highlight=False)
+        elif line.status is ItemStatus.TOUCHED:
+            console.print(f"{prefix} {path_display} (touched)", highlight=False)
+        elif line.status is ItemStatus.STAGED:
+            console.print(f"{prefix} {path_display} (staged)", highlight=False)
+        elif line.status is ItemStatus.UNTRACKED:
+            console.print(f"{prefix} {path_display} (untracked)", highlight=False)
+        elif line.status is ItemStatus.REMOVED:
+            console.print(f"⚠️  {path_display} (removed)", highlight=False)
+        else:
+            console.print(f"{prefix} {path_display}", highlight=False)
+
+    c = report.counters
+    console.print(
+        f"Synced: {c.synced}, Modified: {c.modified}, Touched: {c.touched}, "
+        f"Staged: {c.staged}, Untracked: {c.untracked}, Removed: {c.removed}",
+        highlight=False,
+    )
+
     raise typer.Exit(code=0)
 
 

@@ -9,6 +9,7 @@ from enum import Enum
 import os
 import unicodedata
 from pathlib import Path
+import hashlib
 from typing import Iterable, Optional, Tuple, List, Sequence
 
 from .paths import PENDING, MANIFEST
@@ -131,6 +132,90 @@ def read_manifest() -> list[Entry]:
             seen.add(e.raw)
             deduped.append(e)
     return deduped
+
+
+# --------------------------
+# Phase 2: Hashing & Equality
+# --------------------------
+
+
+def sha256_file(path: Path, chunk_size: int = 8192) -> str:
+    """Compute a SHA-256 hex digest of a file by streaming in chunks.
+
+    Uses a fixed chunk size to bound memory usage and is robust for large files.
+    """
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def files_equal(a: Path, b: Path, chunk_size: int = 8192) -> bool:
+    """Return True if two files are byte-identical.
+
+    First compares file sizes; if they match, compares streamed SHA-256 digests.
+    """
+    sa = a.stat()
+    sb = b.stat()
+    if sa.st_size != sb.st_size:
+        return False
+    return sha256_file(a, chunk_size=chunk_size) == sha256_file(b, chunk_size=chunk_size)
+
+
+def _list_rel_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    if not root.exists():
+        return files
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        # filter ignored dirs in-place
+        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
+        for fname in filenames:
+            if fname in IGNORED_FILES:
+                continue
+            abs_path = Path(dirpath) / fname
+            try:
+                if abs_path.is_symlink():
+                    continue
+            except OSError:
+                logger.warning("Skipping path due to access issue: %s", abs_path)
+                continue
+            rel = abs_path.relative_to(root)
+            files.append(rel)
+    files.sort(key=lambda p: p.as_posix())
+    return files
+
+
+def dir_diff(src: Path, dst: Path) -> tuple[list[Path], list[Path], list[Path]]:
+    """Compare two directories.
+
+    Returns (added, removed, changed) as lists of relative Paths.
+    - added: present only in src
+    - removed: present only in dst
+    - changed: present in both but with different content
+    Applies IGNORED_FILES and IGNORED_DIRS and skips symlinks.
+    On comparison errors, paths are treated as changed (conservative).
+    """
+    src_files = _list_rel_files(src)
+    dst_files = _list_rel_files(dst)
+    set_s = {p.as_posix() for p in src_files}
+    set_d = {p.as_posix() for p in dst_files}
+    added = sorted([Path(p) for p in (set_s - set_d)], key=lambda p: p.as_posix())
+    removed = sorted([Path(p) for p in (set_d - set_s)], key=lambda p: p.as_posix())
+    changed: list[Path] = []
+    for common in sorted(set_s & set_d):
+        a = src / common
+        b = dst / common
+        try:
+            if not files_equal(a, b):
+                changed.append(Path(common))
+        except OSError:
+            logger.warning("Comparison failed for %s", common)
+            changed.append(Path(common))
+    return added, removed, changed
 
 
 def _atomic_write(path: Path, content: str) -> None:
