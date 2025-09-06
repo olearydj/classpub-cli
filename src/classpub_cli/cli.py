@@ -24,6 +24,7 @@ from .utils import (
 )
 from .paths import PREVIEW
 from .status import compute_status, ItemStatus
+from .sync import run_sync
 
 
 app = typer.Typer(add_completion=False, help="Classpub CLI")
@@ -147,6 +148,23 @@ def check(ctx: typer.Context) -> typer.Exit:
     )
 
     raise typer.Exit(code=0)
+
+
+@app.command()
+def sync(
+    ctx: typer.Context,
+    yes: bool = typer.Option(False, "--yes", "-y", help="Auto-approve removals"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change; do not write files"),
+) -> typer.Exit:
+    """Synchronize tracked items from pending/ to preview/ with optional removals."""
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+
+    def _print(line: str) -> None:
+        console.print(line, highlight=False)
+
+    code = run_sync(assume_yes=yes, dry_run=dry_run, console_print=_print)
+    raise typer.Exit(code=code)
 
 
 @app.command(name="release")

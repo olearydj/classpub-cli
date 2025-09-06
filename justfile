@@ -41,11 +41,12 @@ add item:
 remove item:
     uv run classpub remove "{{item}}"
 
-# Future commands (available once implemented in CLI)
-# check:
-#     uv run classpub check
-# sync args="":
-#     uv run classpub sync {{args}}
+# Implemented commands
+check:
+    uv run classpub check
+
+sync args="":
+    uv run classpub sync {{args}}
 # diff item="":
 #     uv run classpub diff {{item}}
 # to-md:
@@ -69,5 +70,31 @@ test-k pattern:
 # Coverage summary
 cov:
     uv run pytest --cov=classpub_cli --cov-report=term-missing -q
+
+
+# --- End-to-End Demo ---
+
+e2e-clean:
+    rm -rf sandbox-e2e
+
+e2e-demo:
+    # clean sandbox
+    rm -rf sandbox-e2e
+    mkdir -p sandbox-e2e/pending/notebooks
+    # initialize manifest
+    cd sandbox-e2e && uv run classpub init
+    # create sample file
+    echo 'print("Hello World")' > sandbox-e2e/pending/notebooks/hello.py
+    # release and check
+    cd sandbox-e2e && uv run classpub release notebooks/hello.py
+    cd sandbox-e2e && uv run classpub check
+    # sync and check
+    cd sandbox-e2e && uv run classpub sync --yes
+    cd sandbox-e2e && uv run classpub check
+    # modify then sync again
+    echo 'print("Modified")' > sandbox-e2e/pending/notebooks/hello.py
+    cd sandbox-e2e && uv run classpub check
+    cd sandbox-e2e && uv run classpub sync --yes
+    cd sandbox-e2e && uv run classpub check
 
 
