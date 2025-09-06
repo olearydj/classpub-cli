@@ -894,4 +894,4 @@ strip_notebooks_in_preview()  # nbstripout preferred; py fallback
 ## 22. References
 
 - cli-template (source for logging and Typer scaffolding): [cli-template](https://github.com/olearydj/cli-template)
-  - Pinned version: tag/commit to be recorded here (e.g., `vX.Y.Z` or commit SHA) and in the repository docs; if the pin becomes unavailable, fall back to vendored scaffolding per §3.
+  - Pinned version: commit `553817c53bf9ea592620d7beb5f44801bc5e2020` (2025-08-10, "uv run for pytest in justfile"). See commit [553817c](https://github.com/olearydj/cli-template/commit/553817c53bf9ea592620d7beb5f44801bc5e2020). If the pin becomes unavailable, fall back to vendored scaffolding per §3.
