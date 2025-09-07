@@ -8,11 +8,11 @@ default:
 
 # Install runtime deps
 install:
-    uv sync
+    uv sync --no-dev
 
 # Install with dev extras (pytest, coverage)
 install-dev:
-    uv sync --extra dev
+    uv sync
 
 # --- CLI Proxies (prefer these commands) ---
 
@@ -50,8 +50,8 @@ sync args="":
     uv run classpub sync {{args}}
 # diff item="":
 #     uv run classpub diff {{item}}
-# to-md:
-#     uv run classpub to-md
+to-md args="":
+    uv run classpub to-md {{args}}
 # clean:
 #     uv run classpub clean
 
@@ -71,7 +71,7 @@ test-k pattern:
 
 # Coverage summary
 cov:
-    uv run pytest --cov=classpub_cli --cov-report=term-missing -q
+    uv run pytest --cov=classpub_cli --cov-report=term
 
 
 # --- End-to-End Demo ---

@@ -885,8 +885,8 @@ strip_notebooks_in_preview()  # nbstripout preferred; py fallback
 - No regressions in previously completed phases (full suite stays green).
 
 ### How to run tests per phase
-- All: `pytest -q --cov=classpub_cli --cov-report=term-missing`.
-- Focus by keyword (Phase 1 example): `pytest -q -k "init or release or remove"`.
+- All: `uv run pytest -q --cov=classpub_cli --cov-report=term-missing`.
+- Focus by keyword (Phase 1 example): `uv run pytest -q -k "init or release or remove"`.
 - Verify lock/IO tests on both macOS and Linux CI runners.
 
 ---

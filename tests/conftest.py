@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import unicodedata
 
 import pytest
@@ -10,6 +11,10 @@ from typer.testing import CliRunner
 @pytest.fixture
 def cli_runner() -> CliRunner:
     return CliRunner()
+
+
+# Silence Jupyter deprecation warning about platformdirs by setting the env var at import time
+os.environ.setdefault("JUPYTER_PLATFORM_DIRS", "1")
 
 
 @pytest.fixture

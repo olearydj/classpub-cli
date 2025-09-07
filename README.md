@@ -180,6 +180,21 @@ pytest -q --cov=classpub_cli --cov-report=term-missing
 # lint/style (if configured)
 ```
 
+### Jupyter kernel (optional, for --execute)
+
+The `--execute` flag in `classpub to-md` runs notebooks in the current virtual environment via `ipykernel`.
+
+- Install dev dependencies (includes `ipykernel`) with uv:
+  - `uv sync` (dev group is included by default), or `uv sync --dev`
+- Verify `ipykernel` is available:
+  - `uv run python -c "import ipykernel; print(ipykernel.__version__)"`
+- (Optional) Install a kernelspec for local Jupyter use:
+  - `uv run python -m ipykernel install --user --name "classpub-test" --display-name "classpub-test"`
+
+Notes:
+- `ipykernel` does not provide a `ipykernel` console script; use `python -m ipykernel`.
+- If you don’t use `--execute`, `ipykernel` is not required.
+
 Performance targets and methodology are documented in TDD.md §11.1.
 
 ## Roadmap

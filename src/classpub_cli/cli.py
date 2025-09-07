@@ -26,6 +26,7 @@ from .paths import PREVIEW
 from .status import compute_status, ItemStatus
 from .sync import run_sync
 from .diff import run_diff_all, run_diff_item
+from .convert import run_to_md
 
 
 app = typer.Typer(add_completion=False, help="Classpub CLI")
@@ -281,6 +282,27 @@ def diff(ctx: typer.Context, item: Optional[str] = typer.Argument(None)) -> type
     else:
         code = run_diff_item(item, _print)
         raise typer.Exit(code=code)
+
+
+@app.command(name="to-md")
+def to_md(
+    ctx: typer.Context,
+    source: str = typer.Option("pending", "--source", help="Notebook source: pending or preview"),
+    outputs: str = typer.Option("strip", "--outputs", help="Output policy: strip or keep"),
+    execute: bool = typer.Option(False, "--execute", help="Execute notebooks in current venv before converting"),
+) -> typer.Exit:
+    """Convert notebooks to Markdown under pending/md/..."""
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+    if not utils.ensure_repo_root_present():
+        console.print("❌ This command must be run from the repository root (missing 'pending/').", highlight=False)
+        raise typer.Exit(code=1)
+
+    def _print(line: str) -> None:
+        console.print(line, highlight=False)
+
+    code = run_to_md(source=source, outputs=outputs, execute=execute, console_print=_print)
+    raise typer.Exit(code=code)
 
 
 def main() -> None:
