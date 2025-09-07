@@ -54,12 +54,10 @@ def _write_manifest_header(path: Path) -> None:
         path.write_text(header, encoding="utf-8")
 
 
-def _version_callback(value: bool):
-    if value:
-        typer.echo(__version__)
-        raise typer.Exit(code=0)
+ 
 
 
+@typer.version_option(__version__)
 @app.callback(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
 def cli_callback(
     ctx: typer.Context,
@@ -68,13 +66,6 @@ def cli_callback(
     log_format: str = typer.Option("human", "--log-format", help="Log format: human or json"),
     log_level: Optional[str] = typer.Option(None, "--log-level", help="Console log level override"),
     no_color: bool = typer.Option(False, "--no-color", help="Disable color output"),
-    version: bool = typer.Option(
-        False,
-        "--version",
-        help="Show the CLASSPUB version and exit",
-        is_eager=True,
-        callback=_version_callback,
-    ),
 ) -> None:
     console_level = utils.compute_console_level(verbose, quiet, log_level)
     setup_logging(console_level, log_format, no_color)
@@ -88,7 +79,6 @@ def cli_callback(
     ctx.obj = {"no_color": no_color, "config": cfg}
     # If invoked without a subcommand, show help explicitly so global options are visible
     if ctx.invoked_subcommand is None and not ctx.resilient_parsing:
-        typer.echo(typer.get_app_dir())  # no-op to satisfy coverage tools; help follows
         typer.echo(typer.get_current_context().get_help())
         raise typer.Exit(code=0)
 
