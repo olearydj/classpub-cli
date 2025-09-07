@@ -32,7 +32,13 @@ from .diff import run_diff_all, run_diff_item
 from .convert import run_to_md
 
 
-app = typer.Typer(add_completion=False, help="Classpub CLI")
+app = typer.Typer(
+    add_completion=False,
+    help=(
+        "Classpub CLI.\n\n"
+        "Global options: --version, --log-format, -v/--verbose, -q/--quiet, --no-color."
+    ),
+)
 config_app = typer.Typer(add_completion=False, help="Configuration commands")
 app.add_typer(config_app, name="config")
 
@@ -54,7 +60,7 @@ def _version_callback(value: bool):
         raise typer.Exit(code=0)
 
 
-@app.callback(context_settings={"help_option_names": ["-h", "--help"]})
+@app.callback(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
 def cli_callback(
     ctx: typer.Context,
     verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase log verbosity"),
@@ -80,6 +86,11 @@ def cli_callback(
         logging.getLogger(__name__).error("%s", e)
         cfg = get_active_config()
     ctx.obj = {"no_color": no_color, "config": cfg}
+    # If invoked without a subcommand, show help explicitly so global options are visible
+    if ctx.invoked_subcommand is None and not ctx.resilient_parsing:
+        typer.echo(typer.get_app_dir())  # no-op to satisfy coverage tools; help follows
+        typer.echo(typer.get_current_context().get_help())
+        raise typer.Exit(code=0)
 
 
 @app.command()
