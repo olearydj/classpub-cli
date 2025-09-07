@@ -79,7 +79,7 @@ def cli_callback(
     ctx.obj = {"no_color": no_color, "config": cfg}
     # If invoked without a subcommand, show help explicitly so global options are visible
     if ctx.invoked_subcommand is None and not ctx.resilient_parsing:
-        typer.echo(typer.get_current_context().get_help())
+        typer.echo(ctx.get_help())
         raise typer.Exit(code=0)
 
 
