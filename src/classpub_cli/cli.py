@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-import click
 
 from .logging import get_console, setup_logging
 from .config import ensure_config_loaded, get_active_config
@@ -56,9 +55,12 @@ def _write_manifest_header(path: Path) -> None:
 
 
  
+def _version_callback(value: bool):
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit(code=0)
 
 
-@click.version_option(__version__)
 @app.callback(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
 def cli_callback(
     ctx: typer.Context,
@@ -67,6 +69,13 @@ def cli_callback(
     log_format: str = typer.Option("human", "--log-format", help="Log format: human or json"),
     log_level: Optional[str] = typer.Option(None, "--log-level", help="Console log level override"),
     no_color: bool = typer.Option(False, "--no-color", help="Disable color output"),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        help="Show the CLASSPUB version and exit",
+        is_eager=True,
+        callback=_version_callback,
+    ),
 ) -> None:
     console_level = utils.compute_console_level(verbose, quiet, log_level)
     setup_logging(console_level, log_format, no_color)
