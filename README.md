@@ -23,7 +23,7 @@ Course publishing CLI for managing a three-stage content workflow: develop in `p
 
 ## Requirements
 
-- Python 3.13+
+- Python 3.10+
 - Git CLI ≥ 2.20 (for text diffs)
 
 Python libraries (installed with the package):
