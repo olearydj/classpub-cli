@@ -24,19 +24,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up uv and Python
-        uses: astral-sh/setup-uv@v3
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
           enable-cache: true
-          cache-dependency-path: |
-            pyproject.toml
-            uv.lock
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
 
       - name: Show tool versions
         run: |
           uv --version
-          uv python --version
           python -V
           git --version
 
