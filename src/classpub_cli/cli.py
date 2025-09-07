@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+import click
 
 from .logging import get_console, setup_logging
 from .config import ensure_config_loaded, get_active_config
@@ -57,7 +58,7 @@ def _write_manifest_header(path: Path) -> None:
  
 
 
-@typer.version_option(__version__)
+@click.version_option(__version__)
 @app.callback(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
 def cli_callback(
     ctx: typer.Context,
