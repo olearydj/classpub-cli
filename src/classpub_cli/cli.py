@@ -262,13 +262,21 @@ def release_cmd(ctx: typer.Context, item: str = typer.Argument(..., help="File o
     raise typer.Exit(code=0)
 
 
-@app.command(name="add")
+@app.command(
+    name="add",
+    help="Alias for 'release': mark a file or folder under pending/ for release",
+)
 def add_alias(ctx: typer.Context, item: str = typer.Argument(..., help="Alias for release")) -> typer.Exit:
+    """Alias for 'release': mark a file or folder under pending/ for release."""
     return release_cmd(ctx, item)
 
 
-@app.command(name="remove")
+@app.command(
+    name="remove",
+    help="Remove a file or folder from the release manifest (pending/RELEASES.txt)",
+)
 def remove_cmd(ctx: typer.Context, item: str = typer.Argument(..., help="File or folder to remove from release manifest")) -> typer.Exit:
+    """Remove a file or folder from the release manifest (pending/RELEASES.txt)."""
     no_color = ctx.obj.get("no_color", False)
     console = get_console(no_color=no_color)
 
