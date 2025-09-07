@@ -81,7 +81,7 @@ e2e-clean:
     rm -rf sandbox-e2e
 
 # Run an end-to-end test of classpub
-e2e-demo:
+e2e:
     bash scripts/e2e-demo.sh
 
 

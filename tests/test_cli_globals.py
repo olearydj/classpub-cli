@@ -29,6 +29,21 @@ def test_warning_console_level_still_prints_result_to_stdout():
     assert res.stdout.strip() != ""
 
 
+def test_version_and_alias_simple(cli_runner: CliRunner):
+    # --version prints a version-like string
+    res_v = cli_runner.invoke(app, ["--version"])
+    assert res_v.exit_code == 0
+    assert "." in res_v.stdout
+    # alias add works
+    from pathlib import Path
+    with cli_runner.isolated_filesystem():
+        (Path("pending") / "d").mkdir(parents=True, exist_ok=True)
+        (Path("pending") / "d" / "x.txt").write_text("x\n", encoding="utf-8")
+        res_add = cli_runner.invoke(app, ["add", "d/x.txt"])
+        assert res_add.exit_code == 0
+        assert "✓ Marked d/x.txt for release" in res_add.stdout
+
+
 def test_console_level_env_default_and_explicit_override(monkeypatch):
     runner = CliRunner()
     # production env should default console level to WARNING (no noisy stderr expected from INFO logs)

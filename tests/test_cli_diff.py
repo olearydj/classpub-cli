@@ -167,6 +167,25 @@ def test_diff_git_version_insufficient_fails_gracefully(cli_runner: CliRunner, t
     assert "❌ Git >= 2.20 required for diff" in res.stdout
 
 
+def test_diff_item_side_only_messages(cli_runner: CliRunner, tmp_repo, write_manifest):
+    # Track a file and a folder, create side-only conditions and assert messages
+    (Path("pending") / "onlyp.txt").write_text("x\n", encoding="utf-8")
+    write_manifest(["onlyp.txt"])  # tracked file
+    # For folder: tracked but exists only in preview
+    (Path("preview") / "onlyq").mkdir(parents=True, exist_ok=True)
+    write_manifest(["onlyq/"],)
+
+    # File exists only in pending
+    r1 = cli_runner.invoke(app, ["diff", "onlyp.txt"])
+    assert r1.exit_code == 0
+    assert "ℹ️  onlyp.txt exists in pending but not in preview" in r1.stdout
+
+    # Folder exists only in preview
+    r2 = cli_runner.invoke(app, ["diff", "onlyq/"])
+    assert r2.exit_code == 0
+    assert "ℹ️  onlyq/ exists in preview but not in pending" in r2.stdout
+
+
 def test_diff_folder_summary_ignores_filtered_and_symlinks(cli_runner: CliRunner, tmp_repo, write_manifest):
     base = Path("pending") / "filt"
     base.mkdir(parents=True, exist_ok=True)

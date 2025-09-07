@@ -13,6 +13,12 @@ mkdir -p "$SANDBOX/pending/notebooks"
 # init manifest
 (cd "$SANDBOX" && uv run classpub init)
 
+# initial validate: preview missing warning, deps/git OK, exit 0
+(cd "$SANDBOX" && uv run classpub validate > out.validate.init.txt)
+grep -q '✅ Dependencies OK' "$SANDBOX/out.validate.init.txt"
+grep -q '✅ Git OK' "$SANDBOX/out.validate.init.txt"
+grep -q 'preview/ is missing (informational)' "$SANDBOX/out.validate.init.txt"
+
 # sample file and notebook (with outputs)
 echo 'print("Hello World")' > "$SANDBOX/pending/notebooks/hello.py"
 uv run python -c "import nbformat; from pathlib import Path; nb=nbformat.v4.new_notebook(); c=nbformat.v4.new_code_cell(source='print(\"hello\")\n', execution_count=2); c.outputs=[nbformat.v4.new_output(output_type='stream', name='stdout', text='hello\n')]; nb.cells.append(c); p=Path('$SANDBOX/pending/notebooks/demo.ipynb'); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(nbformat.writes(nb), encoding='utf-8')"
@@ -25,6 +31,25 @@ uv run python -c "import nbformat; from pathlib import Path; nb=nbformat.v4.new_
 # sync and check
 (cd "$SANDBOX" && uv run classpub sync --yes)
 (cd "$SANDBOX" && uv run classpub check)
+
+# validate after first sync: should succeed with summary line
+(cd "$SANDBOX" && uv run classpub validate > out.validate.after_sync.txt)
+grep -q '✅ Validate complete:' "$SANDBOX/out.validate.after_sync.txt"
+
+# manifest folder presence warnings (missing in pending and preview)
+echo 'ghost/' >> "$SANDBOX/pending/RELEASES.txt"
+(cd "$SANDBOX" && uv run classpub validate > out.validate.ghost.txt)
+grep -q 'ghost/ (missing from pending)' "$SANDBOX/out.validate.ghost.txt"
+grep -q 'preview/ghost/ is missing' "$SANDBOX/out.validate.ghost.txt"
+# remove ghost entry from manifest to avoid affecting later steps
+grep -v '^ghost/$' "$SANDBOX/pending/RELEASES.txt" > "$SANDBOX/pending/RELEASES.tmp" && mv "$SANDBOX/pending/RELEASES.tmp" "$SANDBOX/pending/RELEASES.txt"
+
+# orphan preview folder detection
+mkdir -p "$SANDBOX/preview/orphaned"
+echo 'x' > "$SANDBOX/preview/orphaned/file.txt"
+(cd "$SANDBOX" && uv run classpub validate > out.validate.orphan.txt)
+grep -q 'Orphan preview folder: preview/orphaned/' "$SANDBOX/out.validate.orphan.txt"
+rm -rf "$SANDBOX/preview/orphaned"
 
 # verify notebook in preview is stripped
 grep -q '"execution_count": null' "$SANDBOX/preview/notebooks/demo.ipynb"
@@ -59,6 +84,14 @@ code=$?
 set -e
 test "$code" -eq 1
 grep -q 'must not be a symlink' "$SANDBOX/out.txt"
+
+# validate should also report symlink as error (exit 1)
+set +e
+(cd "$SANDBOX" && uv run classpub validate > out.validate.symlink.txt 2>&1)
+vcode=$?
+set -e
+test "$vcode" -eq 1
+grep -q 'preview/ must not be a symlink' "$SANDBOX/out.validate.symlink.txt"
 
 # --- to-md end-to-end coverage ---
 
@@ -170,6 +203,16 @@ h2=$(shasum "$md" | awk '{print $1}')
 test "$h1" = "$h2"
 
 echo '✅ to-md e2e checks completed'
+
+# --- clean command coverage ---
+# create system files and checkpoints then clean
+touch "$SANDBOX/pending/.DS_Store"
+mkdir -p "$SANDBOX/pending/x/.ipynb_checkpoints"
+touch "$SANDBOX/preview/.DS_Store"
+mkdir -p "$SANDBOX/preview/y/.ipynb_checkpoints"
+(cd "$SANDBOX" && uv run classpub clean > out.clean.txt)
+grep -q '✓ Clean complete:' "$SANDBOX/out.clean.txt"
+! find "$SANDBOX" -name '.DS_Store' -o -name '.ipynb_checkpoints' | grep -q . || (echo 'clean did not remove all targets' >&2; exit 1)
 
 echo '✅ e2e demo completed successfully'
 

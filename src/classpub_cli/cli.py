@@ -24,6 +24,8 @@ from .utils import (
 )
 from .paths import PREVIEW
 from .status import compute_status, ItemStatus
+from .validate import run_validate
+from .clean import run_clean
 from .sync import run_sync
 from .diff import run_diff_all, run_diff_item
 from .convert import run_to_md
@@ -85,23 +87,15 @@ def init(ctx: typer.Context) -> typer.Exit:
 
 @app.command()
 def validate(ctx: typer.Context) -> typer.Exit:
-    """Phase 0: Check required Python deps and Git CLI version."""
+    """Validate repository structure and environment."""
     no_color = ctx.obj.get("no_color", False)
     console = get_console(no_color=no_color)
-    missing = utils.check_python_deps()
-    if missing:
-        for name in missing:
-            console.print(f"❌ Missing dependency: {name}", highlight=False)
-        raise typer.Exit(code=1)
 
-    ok, ver = utils.git_version_ok()
-    if not ok:
-        console.print("❌ Git >= 2.20 required for diff", highlight=False)
-        raise typer.Exit(code=1)
+    def _print(line: str) -> None:
+        console.print(line, highlight=False)
 
-    console.print("✅ Dependencies OK", highlight=False)
-    console.print(f"✅ Git OK", highlight=False)
-    raise typer.Exit(code=0)
+    code = run_validate(_print)
+    raise typer.Exit(code=code)
 
 
 @app.command()
@@ -302,6 +296,19 @@ def to_md(
         console.print(line, highlight=False)
 
     code = run_to_md(source=source, outputs=outputs, execute=execute, console_print=_print)
+    raise typer.Exit(code=code)
+
+
+@app.command()
+def clean(ctx: typer.Context) -> typer.Exit:
+    """Remove .DS_Store files and .ipynb_checkpoints directories under pending/ and preview/."""
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+
+    def _print(line: str) -> None:
+        console.print(line, highlight=False)
+
+    code = run_clean(_print)
     raise typer.Exit(code=code)
 
 
