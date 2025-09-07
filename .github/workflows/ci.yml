@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-path: |
+            pyproject.toml
+            uv.lock
+
+      - name: Show tool versions
+        run: |
+          uv --version
+          uv python --version
+          python -V
+          git --version
+
+      - name: Sync dependencies (dev)
+        run: uv sync
+
+      - name: Configure nbdime Git integration
+        run: |
+          uv run nbdime config-git --enable --global
+          git config --global diff.jupyternotebook.tool nbdime
+          git config --global --list | grep nbdime || true
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest -q \
+            --cov=classpub_cli \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --junitxml=pytest.xml
+
+      - name: Enforce coverage ≥80% minimum
+        run: |
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse("coverage.xml").getroot()
+          except Exception as e:
+              print(f"coverage.xml parse error: {e}", file=sys.stderr)
+              sys.exit(1)
+          overall = float(root.attrib.get("line-rate", "0")) * 100.0
+          minimum = 80.0
+          print(f"Overall coverage: {overall:.2f}% (min {minimum:.2f}%)")
+          if overall + 1e-9 < minimum:
+              sys.exit(1)
+          PY
+
+      - name: Upload coverage.xml
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python }}
+          path: coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload pytest.xml
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.os }}-py${{ matrix.python }}
+          path: pytest.xml
+          if-no-files-found: error
+          retention-days: 7
+
+
