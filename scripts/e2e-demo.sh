@@ -19,6 +19,15 @@ grep -q '✅ Dependencies OK' "$SANDBOX/out.validate.init.txt"
 grep -q '✅ Git OK' "$SANDBOX/out.validate.init.txt"
 grep -q 'preview/ is missing (informational)' "$SANDBOX/out.validate.init.txt"
 
+# --- config init & idempotency ---
+(cd "$SANDBOX" && uv run classpub config init > out.config.init.txt)
+test -f "$SANDBOX/classpub.toml"
+grep -q '\[general\]' "$SANDBOX/classpub.toml"
+grep -q '\[ignore\]' "$SANDBOX/classpub.toml"
+# idempotent second run
+(cd "$SANDBOX" && uv run classpub config init > out.config.init2.txt)
+grep -q 'already exists' "$SANDBOX/out.config.init2.txt"
+
 # sample file and notebook (with outputs)
 echo 'print("Hello World")' > "$SANDBOX/pending/notebooks/hello.py"
 uv run python -c "import nbformat; from pathlib import Path; nb=nbformat.v4.new_notebook(); c=nbformat.v4.new_code_cell(source='print(\"hello\")\n', execution_count=2); c.outputs=[nbformat.v4.new_output(output_type='stream', name='stdout', text='hello\n')]; nb.cells.append(c); p=Path('$SANDBOX/pending/notebooks/demo.ipynb'); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(nbformat.writes(nb), encoding='utf-8')"
@@ -74,6 +83,45 @@ echo "$out" | grep -qv 'Continue with removal?'
 (cd "$SANDBOX" && uv run classpub sync --yes)
 test ! -f "$SANDBOX/preview/stray.ipynb"
 
+# --- config assume_yes behavior ---
+# Create a file, sync it, then remove from manifest and rely on config assume_yes=true
+echo 'cfg' > "$SANDBOX/pending/cfg-auto-remove.txt"
+(cd "$SANDBOX" && uv run classpub release cfg-auto-remove.txt)
+(cd "$SANDBOX" && uv run classpub sync --yes)
+# enable assume_yes in config
+cat > "$SANDBOX/classpub.toml" <<'CFG'
+[general]
+assume_yes = true
+
+[ignore]
+# keep defaults; optional additions can be placed here
+patterns = [
+]
+CFG
+# Clear manifest to make the preview file an orphan
+echo '' > "$SANDBOX/pending/RELEASES.txt"
+(cd "$SANDBOX" && uv run classpub sync) # no --yes, should auto-remove
+test ! -f "$SANDBOX/preview/cfg-auto-remove.txt"
+
+# --- custom ignore patterns suppress in check ---
+# Add patterns and artifacts; ensure they are not shown in status
+cat > "$SANDBOX/classpub.toml" <<'CFG2'
+[general]
+assume_yes = true
+
+[ignore]
+patterns = [
+  "node_modules/",
+  "*.tmp",
+]
+CFG2
+mkdir -p "$SANDBOX/pending/node_modules"
+echo '{}' > "$SANDBOX/pending/node_modules/pkg.json"
+echo 'tmp' > "$SANDBOX/pending/skip.tmp"
+chk_ign=$(cd "$SANDBOX" && uv run classpub check)
+echo "$chk_ign" | grep -qv 'node_modules' || (echo 'node_modules should be ignored in check' >&2; exit 1)
+echo "$chk_ign" | grep -qv 'skip.tmp' || (echo 'skip.tmp should be ignored in check' >&2; exit 1)
+
 # preview symlink rejection (exit code + message)
 rm -rf "$SANDBOX/preview"
 mkdir -p "$SANDBOX/_target"
@@ -92,6 +140,12 @@ vcode=$?
 set -e
 test "$vcode" -eq 1
 grep -q 'preview/ must not be a symlink' "$SANDBOX/out.validate.symlink.txt"
+
+# --- restore normal preview & manifest for to-md coverage ---
+# Ensure preview is a normal directory with synchronized notebooks again
+rm -rf "$SANDBOX/preview"
+(cd "$SANDBOX" && uv run classpub release notebooks/)
+(cd "$SANDBOX" && uv run classpub sync --yes)
 
 # --- to-md end-to-end coverage ---
 

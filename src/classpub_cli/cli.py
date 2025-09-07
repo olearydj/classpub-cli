@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 
 from .logging import get_console, setup_logging
+from .config import ensure_config_loaded, get_active_config
 from . import __version__
 from .paths import MANIFEST, PENDING
 from . import utils
@@ -32,6 +33,8 @@ from .convert import run_to_md
 
 
 app = typer.Typer(add_completion=False, help="Classpub CLI")
+config_app = typer.Typer(add_completion=False, help="Configuration commands")
+app.add_typer(config_app, name="config")
 
 
 def _write_manifest_header(path: Path) -> None:
@@ -69,7 +72,14 @@ def cli_callback(
 ) -> None:
     console_level = utils.compute_console_level(verbose, quiet, log_level)
     setup_logging(console_level, log_format, no_color)
-    ctx.obj = {"no_color": no_color}
+    # Load project-local config (non-fatal for commands that don't require repo root)
+    try:
+        cfg = ensure_config_loaded(Path.cwd())
+    except ValueError as e:
+        # Defer surfacing to subcommands that depend on config; minimal logging here
+        logging.getLogger(__name__).error("%s", e)
+        cfg = get_active_config()
+    ctx.obj = {"no_color": no_color, "config": cfg}
 
 
 @app.command()
@@ -82,6 +92,49 @@ def init(ctx: typer.Context) -> typer.Exit:
         raise typer.Exit(code=0)
     _write_manifest_header(MANIFEST)
     console.print("✓ Created pending/RELEASES.txt", highlight=False)
+    raise typer.Exit(code=0)
+
+
+@config_app.command(name="init")
+def config_init(ctx: typer.Context) -> typer.Exit:
+    """Generate a fully commented classpub.toml in the repository root."""
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+    # Require repository root (pending/ must exist)
+    if not utils.ensure_repo_root_present():
+        console.print("❌ Run from the repository root (pending/ missing)", highlight=False)
+        raise typer.Exit(code=1)
+
+    path = Path("classpub.toml")
+    if path.exists():
+        console.print("⚠️  classpub.toml already exists", highlight=False)
+        raise typer.Exit(code=0)
+
+    template = (
+        "# classpub.toml\n\n"
+        "[general]\n"
+        "# strict = false      # Treat warnings as errors (validate exits 1).\n"
+        "# assume_yes = false  # Auto-confirm destructive prompts (e.g., sync removals).\n\n"
+        "[sync]\n"
+        "# dry_run = false            # Compute the plan without writing.\n"
+        "# large_file_warn_mb = 100   # Warn when hashing files larger than this size (MB).\n\n"
+        "[ignore]\n"
+        "# patterns = [\n"
+        "#   \".DS_Store\",\n"
+        "#   \".gitignore\",\n"
+        "#   \".gitattributes\",\n"
+        "#   \".ipynb_checkpoints/\",\n"
+        "#   \"RELEASES.txt\",\n"
+        "# ]\n\n"
+        "[hash]\n"
+        "# chunk_size = 8192   # Streaming chunk size in bytes for hashing.\n\n"
+        "[logging]\n"
+        "# level = \"INFO\"      # One of: ERROR, WARNING, INFO, DEBUG\n"
+        "# format = \"human\"    # One of: human, json\n"
+        "# timestamps = true    # Include timestamps in logs (JSON always includes ISO8601)\n"
+    )
+    path.write_text(template, encoding="utf-8")
+    console.print("✓ Created classpub.toml", highlight=False)
     raise typer.Exit(code=0)
 
 

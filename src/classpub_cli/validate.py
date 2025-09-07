@@ -8,10 +8,10 @@ from typing import Callable, Iterable
 
 from .paths import PENDING, PREVIEW, MANIFEST
 from .utils import (
-    IGNORED_DIRS,
     read_manifest,
     ensure_repo_root_present,
 )
+from .config import get_active_config, compile_ignore_matchers
 from . import utils as utils_mod
 
 
@@ -48,12 +48,14 @@ def _case_collision_messages(root: Path, label: str, limit_groups: int = 50) -> 
     groups: dict[str, set[str]] = {}
     if not root.exists():
         return []
+    cfg = get_active_config()
+    _file_ignored, dir_ignored = compile_ignore_matchers(cfg)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         # Consider both directories and files
         rel_dir = Path(dirpath).relative_to(root)
         # Record directories
         for d in list(dirnames):
-            if d in IGNORED_DIRS:
+            if dir_ignored(d, (rel_dir / d).as_posix()):
                 continue
             rel = (rel_dir / d).as_posix()
             groups.setdefault(rel.casefold(), set()).add(rel)
@@ -96,8 +98,10 @@ def _orphan_preview_folders_messages(tracked_files: set[str], tracked_dirs: set[
     lines: list[str] = []
     if not PREVIEW.exists():
         return lines
+    cfg = get_active_config()
+    _file_ignored, dir_ignored = compile_ignore_matchers(cfg)
     try:
-        entries = [p for p in PREVIEW.iterdir() if p.is_dir() and (p.name not in IGNORED_DIRS)]
+        entries = [p for p in PREVIEW.iterdir() if p.is_dir() and (not dir_ignored(p.name, p.relative_to(PREVIEW).as_posix()))]
     except FileNotFoundError:
         return lines
     except PermissionError:
@@ -215,7 +219,17 @@ def run_validate(console_print: Callable[[str], None]) -> int:
         # Non-fatal
         pass
 
+    # Strict mode: escalate warnings to errors per config
+    try:
+        strict = bool(get_active_config().general.strict)
+    except Exception:
+        strict = False
+
+    exit_code = 1 if counts.errors > 0 else 0
+    if strict and counts.warnings > 0:
+        exit_code = 1
+
     console_print(f"✅ Validate complete: {counts.errors} errors, {counts.warnings} warnings")
-    return 1 if counts.errors > 0 else 0
+    return exit_code
 
 

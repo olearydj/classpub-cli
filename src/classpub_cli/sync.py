@@ -12,7 +12,8 @@ from typing import Callable, Iterable, List, Tuple
 import nbformat
 
 from .paths import PENDING, PREVIEW
-from .utils import Entry, read_manifest, files_equal, IGNORED_DIRS, IGNORED_FILES, _atomic_write, content_equal
+from .utils import Entry, read_manifest, files_equal, _atomic_write, content_equal
+from .config import get_active_config, compile_ignore_matchers
 
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,14 @@ def _iter_rel_files(root: Path) -> list[Path]:
     files: list[Path] = []
     if not root.exists():
         return files
+    cfg = get_active_config()
+    file_ignored, dir_ignored = compile_ignore_matchers(cfg)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        dirnames[:] = [d for d in dirnames if not dir_ignored(d, f"{rel_dir}/{d}" if rel_dir else d)]
         for fname in filenames:
-            if fname in IGNORED_FILES:
+            rel_posix = (Path(dirpath).relative_to(root) / fname).as_posix()
+            if file_ignored(fname, rel_posix):
                 continue
             abs_path = Path(dirpath) / fname
             if _is_symlink(abs_path):
@@ -571,7 +576,14 @@ def run_sync(assume_yes: bool, dry_run: bool, console_print: Callable[[str], Non
         if dry_run:
             removed_files = len(orphans)
         else:
-            if assume_yes or _prompt_yes():
+            # Respect config general.assume_yes if CLI flag not set
+            cfg_assume_yes = False
+            try:
+                from .config import get_active_config
+                cfg_assume_yes = bool(get_active_config().general.assume_yes)
+            except Exception:
+                cfg_assume_yes = False
+            if assume_yes or cfg_assume_yes or _prompt_yes():
                 removed_files = _remove_files(orphans, dry_run=False)
             else:
                 console_print("  Skipped removal")

@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Optional
 
 from .paths import PENDING, PREVIEW
-from .utils import Entry, IGNORED_DIRS, IGNORED_FILES, read_manifest, ensure_repo_root_present, files_equal, content_equal
+from .utils import Entry, read_manifest, ensure_repo_root_present, files_equal, content_equal
+from .config import get_active_config, compile_ignore_matchers
 
 
 logger = logging.getLogger(__name__)
@@ -59,11 +60,15 @@ def _iter_rel_files(root: Path) -> list[Path]:
     files: list[Path] = []
     if not root.exists():
         return files
+    cfg = get_active_config()
+    file_ignored, dir_ignored = compile_ignore_matchers(cfg)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         # filter ignored dirs
-        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        dirnames[:] = [d for d in dirnames if not dir_ignored(d, f"{rel_dir}/{d}" if rel_dir else d)]
         for fname in filenames:
-            if fname in IGNORED_FILES:
+            rel_posix = (Path(dirpath).relative_to(root) / fname).as_posix()
+            if file_ignored(fname, rel_posix):
                 continue
             abs_path = Path(dirpath) / fname
             try:

@@ -15,6 +15,7 @@ import nbformat
 import json
 
 from .paths import PENDING, MANIFEST
+from .config import get_active_config, compile_ignore_matchers
 
 
 logger = logging.getLogger(__name__)
@@ -86,9 +87,9 @@ def compute_console_level(verbose_count: int, quiet_count: int, explicit_level: 
 # Phase 1: Manifest + Paths
 # --------------------------
 
-# Ignore filters per §8.4
-IGNORED_FILES: tuple[str, ...] = (".DS_Store", ".gitignore", ".gitattributes", "RELEASES.txt")
-IGNORED_DIRS: tuple[str, ...] = (".ipynb_checkpoints",)
+# Ignore filters per §8.4 (defaults live here; configurable via config module)
+DEFAULT_IGNORED_FILES: tuple[str, ...] = (".DS_Store", ".gitignore", ".gitattributes", "RELEASES.txt")
+DEFAULT_IGNORED_DIRS: tuple[str, ...] = (".ipynb_checkpoints",)
 
 
 @dataclass(frozen=True)
@@ -103,11 +104,13 @@ def _normalize_nfc(text: str) -> str:
 
 
 def _is_ignored_file(name: str) -> bool:
-    return name in IGNORED_FILES
+    # Backward-compatible default check; overridden by config-driven helpers in callers
+    return name in DEFAULT_IGNORED_FILES
 
 
 def _is_ignored_dir(name: str) -> bool:
-    return name.rstrip("/") in IGNORED_DIRS
+    # Backward-compatible default check; overridden by config-driven helpers in callers
+    return name.rstrip("/") in DEFAULT_IGNORED_DIRS
 
 
 def ensure_repo_root_present() -> bool:
@@ -233,11 +236,15 @@ def _list_rel_files(root: Path) -> list[Path]:
     files: list[Path] = []
     if not root.exists():
         return files
+    cfg = get_active_config()
+    file_ignored, dir_ignored = compile_ignore_matchers(cfg)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         # filter ignored dirs in-place
-        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
+        rel_dir = Path(dirpath).relative_to(root).as_posix()
+        dirnames[:] = [d for d in dirnames if not dir_ignored(d, f"{rel_dir}/{d}" if rel_dir else d)]
         for fname in filenames:
-            if fname in IGNORED_FILES:
+            rel_posix = (Path(dirpath).relative_to(root) / fname).as_posix()
+            if file_ignored(fname, rel_posix):
                 continue
             abs_path = Path(dirpath) / fname
             try:
