@@ -30,6 +30,7 @@ from .clean import run_clean
 from .sync import run_sync
 from .diff import run_diff_all, run_diff_item
 from .convert import run_to_md
+from .install import run_install
 
 
 app = typer.Typer(
@@ -159,6 +160,24 @@ def validate(ctx: typer.Context) -> typer.Exit:
         console.print(line, highlight=False)
 
     code = run_validate(_print)
+    raise typer.Exit(code=code)
+
+
+@app.command(name="setup")
+def setup(
+    ctx: typer.Context,
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change; do not write files"),
+    skip_ci: bool = typer.Option(False, "--skip-ci", help="Skip writing the GitHub Actions workflow"),
+    force: bool = typer.Option(False, "--force", help="Force install even if this looks like the classpub-cli repo"),
+) -> typer.Exit:
+    """Set up project scaffolding and generate a proxy justfile (backs up existing)."""
+    no_color = ctx.obj.get("no_color", False)
+    console = get_console(no_color=no_color)
+
+    def _print(line: str) -> None:
+        console.print(line, highlight=False)
+
+    code = run_install(dry_run=dry_run, skip_ci=skip_ci, force=force, console_print=_print)
     raise typer.Exit(code=code)
 
 

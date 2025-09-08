@@ -16,6 +16,10 @@ install-dev:
 
 # --- CLI Proxies (prefer these commands) ---
 
+# Show CLI help
+help:
+    uv run classpub --help
+
 # Show CLI version
 version:
     uv run classpub --version
@@ -24,7 +28,7 @@ version:
 init:
     uv run classpub init
 
-# Validate required tools & deps (Phase 0)
+# Validate repository
 validate:
     uv run classpub validate
 
@@ -52,8 +56,10 @@ sync args="":
 #     uv run classpub diff {{item}}
 to-md args="":
     uv run classpub to-md {{args}}
-# clean:
-#     uv run classpub clean
+
+# Remove file cruft, e.g., .ipynb_checkpoints
+clean:
+     uv run classpub clean
 
 # Pass-through runner for advanced usage
 run *args:

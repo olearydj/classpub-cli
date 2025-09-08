@@ -24,7 +24,10 @@ Course publishing CLI for managing a three-stage content workflow: develop in `p
 ## Requirements
 
 - Python 3.10+
-- Git CLI ≥ 2.20 (for text diffs)
+- [Git](https://git-scm.com/) CLI ≥ 2.20 for version control, etc.
+  - e.g. `brew install git`
+- [just](https://github.com/casey/just) command runner used by the generated Justfile
+  - e.g. `brew install just`
 
 Python libraries (installed with the package):
 - Typer, Rich, nbformat, nbdime (Python API), nbconvert, nbstripout
@@ -50,41 +53,38 @@ Repo‑local alternative (committable): add `.gitattributes` with:
 *.ipynb diff=jupyternotebook
 ```
 
-## Installation
+## Installation (project-local with uv)
 
-From source (editable install):
 ```bash
-pip install -e .
-```
-
-Or with uv:
-```bash
+# Add classpub-cli to your project and create venv
+uv init  # ensure pyproject.toml exists before add
+uv add --dev classpub-cli
 uv sync
 ```
 
-The CLI entry point is `classpub` (see `pyproject.toml`).
+The CLI entry point is `classpub`. The generated Justfile calls it via `uv run classpub`.
 
 ## Quick Start
 
 ```bash
-# 1) Initialize a release manifest
-classpub init
+# One-time project setup (scaffolds files and end-user justfile)
+uv run classpub setup
 
-# 2) Mark items for release (files or folders)
-classpub add notebooks/01-intro.ipynb
-classpub add data/
+# Mark items for release (files or folders)
+just add notebooks/01-intro.ipynb
+just add data/
 
-# 3) Check repository status
-classpub check
+# Check repository status
+just check
 
-# 4) Sync released items to preview (prompts before removals)
-classpub sync
+# Sync released items to preview (prompts before removals)
+just sync
 
-# 5) Optional: diff, convert to markdown, validate, clean
-classpub diff
-classpub to-md
-classpub validate
-classpub clean
+# Optional: diff, convert to markdown, validate, clean
+just diff
+just to-md
+just validate
+just clean
 ```
 
 ## Commands (Essentials)

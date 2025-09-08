@@ -119,3 +119,30 @@ def test_validate_summary_counts_two_warnings(cli_runner: CliRunner, tmp_repo, m
     assert "Validate complete: 0 errors, 2 warnings" in res.stdout
 
 
+def test_validate_doctor_warnings(cli_runner: CliRunner, tmp_repo, monkeypatch):
+    _deps_ok(monkeypatch)
+    # Create minimal repo structure but leave preview missing to avoid extra warnings
+    (tmp_repo / "pending").mkdir(exist_ok=True)
+    (tmp_repo / "pending" / "RELEASES.txt").write_text("", encoding="utf-8")
+
+    # Mock subprocess calls in validate for git config and nbdime detection
+    import subprocess as _sp
+    def _check_output(args, text=True):  # noqa: ANN001
+        cmd = " ".join(args)
+        if "user.name" in cmd:
+            return ""  # empty to trigger warning
+        if "user.email" in cmd:
+            return ""  # empty to trigger warning
+        if "diff.jupyternotebook.tool" in cmd:
+            raise Exception("not set")
+        return ""
+
+    monkeypatch.setattr(_sp, "check_output", _check_output)
+
+    res = cli_runner.invoke(app, ["validate"])
+    assert res.exit_code == 0
+    out = res.stdout
+    assert "Git user.name/email not configured globally" in out or "Unable to read git user.name/email" in out
+    assert "Nbdime git integration not detected" in out
+
+

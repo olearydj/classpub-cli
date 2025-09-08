@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -154,6 +156,24 @@ def run_validate(console_print: Callable[[str], None]) -> int:
     else:
         console_print("✅ Git OK")
 
+    # Doctor-style environment advisories (non-fatal warnings)
+    # Git identity
+    try:
+        name = subprocess.check_output(["git", "config", "--global", "user.name"], text=True).strip()
+        email = subprocess.check_output(["git", "config", "--global", "user.email"], text=True).strip()
+        if not name or not email:
+            _warn(console_print, "Git user.name/email not configured globally", counts)
+    except Exception:
+        _warn(console_print, "Unable to read git user.name/email (is git installed/configured?)", counts)
+
+    # nbdime git integration (best-effort)
+    try:
+        tool = subprocess.check_output(["git", "config", "--global", "diff.jupyternotebook.tool"], text=True).strip()
+        if tool.lower() != "nbdime":
+            _warn(console_print, "Nbdime git integration not detected (diff.jupyternotebook.tool != nbdime)", counts)
+    except Exception:
+        _warn(console_print, "Nbdime git integration not detected (configure with: nbdime config-git --enable --global)", counts)
+
     # Structural checks below. If repo root is not present, still report errors but continue.
     if not PENDING.exists():
         _error(console_print, "pending/ is missing", counts)
@@ -215,9 +235,22 @@ def run_validate(console_print: Callable[[str], None]) -> int:
     try:
         if Path(".github").exists() and not gh.exists():
             _warn(console_print, "Missing optional workflow: .github/workflows/publish-public.yml", counts)
+        elif gh.exists():
+            try:
+                body = gh.read_text(encoding="utf-8")
+                if "OWNER/REPO" in body:
+                    _warn(console_print, "Workflow publish-public.yml contains placeholder OWNER/REPO", counts)
+            except Exception:
+                pass
     except Exception:
         # Non-fatal
         pass
+
+    # Justfile runner advisory
+    jf = Path("justfile")
+    if jf.exists():
+        if shutil.which("just") is None:
+            _warn(console_print, "justfile present but 'just' is not installed (brew install just)", counts)
 
     # Strict mode: escalate warnings to errors per config
     try:
