@@ -109,6 +109,18 @@ def test_validate_orphan_preview_folder(cli_runner: CliRunner, tmp_repo, monkeyp
 
 def test_validate_summary_counts_two_warnings(cli_runner: CliRunner, tmp_repo, monkeypatch):
     _deps_ok(monkeypatch)
+    # Ensure doctor checks do not add extra warnings in CI (git identity/nbdime)
+    import subprocess as _sp
+    def _check_output_ok(args, text=True):  # noqa: ANN001
+        cmd = " ".join(args)
+        if "user.name" in cmd:
+            return "CI User"
+        if "user.email" in cmd:
+            return "ci@example.com"
+        if "diff.jupyternotebook.tool" in cmd:
+            return "nbdime"
+        return ""
+    monkeypatch.setattr(_sp, "check_output", _check_output_ok)
     # Prepare: pending exists; manifest has mixed separators; preview missing
     (tmp_repo / "pending").mkdir(exist_ok=True)
     (tmp_repo / "pending" / "RELEASES.txt").write_text("a\\b\\c.txt\n", encoding="utf-8")
